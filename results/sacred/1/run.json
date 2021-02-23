@@ -1,0 +1,104 @@
+{
+  "artifacts": [],
+  "command": "my_main",
+  "experiment": {
+    "base_dir": "/home/james/PycharmProjects/pymarl/src",
+    "dependencies": [
+      "munch==2.3.2",
+      "numpy==1.15.2",
+      "PyYAML==3.13",
+      "sacred==0.7.2",
+      "torch==0.4.1"
+    ],
+    "mainfile": "main.py",
+    "name": "pymarl",
+    "repositories": [],
+    "sources": [
+      [
+        "main.py",
+        "_sources/main_63d7d00072f4e5be0310acb11aa60581.py"
+      ],
+      [
+        "run.py",
+        "_sources/run_7911ddab0b7ff30dd1480a75183ffc39.py"
+      ],
+      [
+        "utils/logging.py",
+        "_sources/logging_aa14e56e60b01dd7a9ddb8e6cdf36b85.py"
+      ]
+    ]
+  },
+  "fail_trace": [
+    "Traceback (most recent call last):\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/sacred/config/captured_function.py\", line 48, in captured_function\n    result = wrapped(*args, **kwargs)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/src/main.py\", line 35, in my_main\n    run(_run, config, _log)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/src/run.py\", line 48, in run\n    run_sequential(args=args, logger=logger)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/src/run.py\", line 166, in run_sequential\n    episode_batch = runner.run(test_mode=False)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/src/runners/episode_runner.py\", line 49, in run\n    self.reset()\n",
+    "  File \"/home/james/PycharmProjects/pymarl/src/runners/episode_runner.py\", line 45, in reset\n    self.env.reset()\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/smac/env/starcraft2/starcraft2.py\", line 347, in reset\n    self._launch()\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/smac/env/starcraft2/starcraft2.py\", line 292, in _launch\n    self._run_config = run_configs.get(version=self.game_version)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/pysc2/run_configs/__init__.py\", line 40, in get\n    return max(configs.values(), key=lambda c: c.priority())(version=version)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/pysc2/run_configs/platforms.py\", line 179, in __init__\n    super(Linux, self).__init__(base_dir, \"SC2_x64\", version=version, env=env)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/pysc2/run_configs/platforms.py\", line 63, in __init__\n    data_dir=base_dir, tmp_dir=None, version=version, cwd=cwd, env=env)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/pysc2/run_configs/lib.py\", line 112, in __init__\n    self.version = self._get_version(version)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/pysc2/run_configs/lib.py\", line 220, in _get_version\n    versions = self.get_versions(containing=game_version)\n",
+    "  File \"/home/james/PycharmProjects/pymarl/venv/lib/python3.6/site-packages/pysc2/run_configs/platforms.py\", line 94, in get_versions\n    for v in os.listdir(versions_dir)\n",
+    "FileNotFoundError: [Errno 2] No such file or directory: '/home/james/PycharmProjects/pymarl/src/3rdparty/StarCraftII/Versions'\n"
+  ],
+  "heartbeat": "2021-02-23T06:26:27.866643",
+  "host": {
+    "ENV": {},
+    "cpu": "Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz",
+    "gpus": {
+      "driver_version": "410.48",
+      "gpus": [
+        {
+          "model": "GeForce GTX 1060",
+          "persistence_mode": false,
+          "total_memory": 6078
+        }
+      ]
+    },
+    "hostname": "james-Lenovo-Legion-Y7000-1060",
+    "os": [
+      "Linux",
+      "Linux-4.15.0-135-generic-x86_64-with-Ubuntu-18.04-bionic"
+    ],
+    "python_version": "3.6.9"
+  },
+  "meta": {
+    "command": "my_main",
+    "options": {
+      "--beat_interval": null,
+      "--capture": null,
+      "--comment": null,
+      "--debug": false,
+      "--enforce_clean": false,
+      "--file_storage": null,
+      "--force": false,
+      "--help": false,
+      "--loglevel": null,
+      "--mongo_db": null,
+      "--name": null,
+      "--pdb": false,
+      "--print_config": false,
+      "--priority": null,
+      "--queue": false,
+      "--sql": null,
+      "--tiny_db": null,
+      "--unobserved": false,
+      "COMMAND": null,
+      "UPDATE": [
+        "env_args.map_name=3m"
+      ],
+      "help": false,
+      "with": true
+    }
+  },
+  "resources": [],
+  "result": null,
+  "start_time": "2021-02-23T06:26:26.092043",
+  "status": "FAILED",
+  "stop_time": "2021-02-23T06:26:27.879622"
+}
