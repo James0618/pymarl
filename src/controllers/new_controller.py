@@ -54,7 +54,8 @@ class NewMAC:
         return agent_outs.view(ep_batch.batch_size, self.n_agents, -1)
 
     def init_hidden(self, batch_size):
-        self.hidden_states = self.agent.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)  # bav
+        self.hidden_states = self.transition_model.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)
+        print(111)
 
     def parameters(self):
         return self.agent.parameters()
@@ -72,7 +73,10 @@ class NewMAC:
         self.agent.load_state_dict(th.load("{}/agent.th".format(path), map_location=lambda storage, loc: storage))
 
     def _build_agents(self, input_shape):
-        self.agent = agent_REGISTRY[self.args.agent](input_shape, self.args)
+        Agent, TransitionModel, OpponentModel = agent_REGISTRY[self.args.agent]
+        self.agent = Agent(input_shape, self.args)
+        self.transition_model = TransitionModel(input_shape, self.args)
+        self.opponent_model = OpponentModel(self.args)
 
     def _build_inputs(self, batch, t):
         # Assumes homogenous agents with flat observations.
