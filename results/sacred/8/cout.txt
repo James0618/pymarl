@@ -1,0 +1,2 @@
+[INFO 20:20:08] pymarl Running command 'my_main'
+[INFO 20:20:08] pymarl Started run with ID "8"
