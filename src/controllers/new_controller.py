@@ -18,65 +18,95 @@ class NewMAC:
 
     def select_actions(self, ep_batch, t_ep, t_env, bs=slice(None), test_mode=False):
         # Only select actions for the selected batch elements in bs
+        # TODO: 2-step rollout
+        batch_size = ep_batch.batch_size
+
         avail_actions = ep_batch["avail_actions"][:, t_ep]
-        agent_outputs = self.forward(ep_batch, t_ep, test_mode=test_mode)
-        chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode)
+        action = th.eye(self.args.n_actions).expand(batch_size, self.n_agents, self.args.n_actions, -1).cuda()
+
+        hidden_state = self.hidden_states.expand(batch_size, self.args.n_actions, self.n_agents, -1).transpose(1, 2)
+        agent_inputs = self._build_inputs(ep_batch, t_ep).expand(batch_size, self.args.n_actions,
+                                                                 self.n_agents, -1).transpose(1, 2)
+
+        next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
+            agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
+
+        agent_outputs = (pred_reward + next_state_value * self.args.gamma).view(ep_batch.batch_size, self.n_agents, -1)
+
+        chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env,
+                                                            test_mode=test_mode)
+
         return chosen_actions
 
-    def forward(self, ep_batch, t, test_mode=False):
-        agent_inputs = self._build_inputs(ep_batch, t)
+    def get_agent_outs(self, ep_batch, t):
+        batch_size = ep_batch.batch_size
+
         avail_actions = ep_batch["avail_actions"][:, t]
-        agent_outs, self.hidden_states = self.agent(agent_inputs, self.hidden_states)
+        action = th.eye(self.args.n_actions).expand(batch_size, self.n_agents, self.args.n_actions, -1).cuda()
 
-        # Softmax the agent outputs if they're policy logits
-        if self.agent_output_type == "pi_logits":
+        hidden_state = self.hidden_states.expand(batch_size, self.args.n_actions, self.n_agents, -1).transpose(1, 2)
+        agent_inputs = self._build_inputs(ep_batch, t).expand(batch_size, self.args.n_actions,
+                                                              self.n_agents, -1).transpose(1, 2)
 
-            if getattr(self.args, "mask_before_softmax", True):
-                # Make the logits for unavailable actions very negative to minimise their affect on the softmax
-                reshaped_avail_actions = avail_actions.reshape(ep_batch.batch_size * self.n_agents, -1)
-                agent_outs[reshaped_avail_actions == 0] = -1e10
+        next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
+            agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
 
-            agent_outs = th.nn.functional.softmax(agent_outs, dim=-1)
-            if not test_mode:
-                # Epsilon floor
-                epsilon_action_num = agent_outs.size(-1)
-                if getattr(self.args, "mask_before_softmax", True):
-                    # With probability epsilon, we will pick an available action uniformly
-                    epsilon_action_num = reshaped_avail_actions.sum(dim=1, keepdim=True).float()
+        agent_outputs = (pred_reward + next_state_value * self.args.gamma).view(ep_batch.batch_size, self.n_agents, -1)
 
-                agent_outs = ((1 - self.action_selector.epsilon) * agent_outs
-                               + th.ones_like(agent_outs) * self.action_selector.epsilon/epsilon_action_num)
+        return agent_outputs, next_hidden_state, pred_observation
 
-                if getattr(self.args, "mask_before_softmax", True):
-                    # Zero out the unavailable actions
-                    agent_outs[reshaped_avail_actions == 0] = 0.0
+    def forward(self, agent_inputs, hidden_state, action):
+        # Rollout part
+        state, state_value = self.state_estimation.forward(hidden_state, agent_inputs)
+        opponent_action = self.opponent_model.forward(state)
 
-        return agent_outs.view(ep_batch.batch_size, self.n_agents, -1)
+        actions = th.cat((action, opponent_action), dim=-1)
+
+        pred_observation, pred_reward, next_hidden_state = self.transition_model.forward(
+            agent_inputs, hidden_state, actions)
+
+        # estimate the next state and its value by prediction of next observation and next hidden state
+        next_state, next_state_value = self.state_estimation.forward(next_hidden_state, pred_observation)
+
+        # return agent_outs.view(ep_batch.batch_size, self.n_agents, -1)
+        return next_hidden_state, pred_observation, pred_reward, next_state_value
 
     def init_hidden(self, batch_size):
         self.hidden_states = self.transition_model.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)
-        print(111)
 
     def parameters(self):
-        return self.agent.parameters()
+        # return self.agent.parameters()
+        return list(self.transition_model.parameters())
 
     def load_state(self, other_mac):
-        self.agent.load_state_dict(other_mac.agent.state_dict())
+        self.transition_model.load_state_dict(other_mac.transition_model.state_dict())
+        self.opponent_model.load_state_dict(other_mac.opponent_model.state_dict())
+        self.state_estimation.load_state_dict(other_mac.state_estimation.state_dict())
 
     def cuda(self):
-        self.agent.cuda()
+        self.transition_model.cuda()
+        self.opponent_model.cuda()
+        self.state_estimation.cuda()
 
     def save_models(self, path):
-        th.save(self.agent.state_dict(), "{}/agent.th".format(path))
+        th.save(self.transition_model.state_dict(), "{}/transition_model.th".format(path))
+        th.save(self.opponent_model.state_dict(), "{}/opponent_model.th".format(path))
+        th.save(self.state_estimation.state_dict(), "{}/state_estimation.th".format(path))
 
     def load_models(self, path):
-        self.agent.load_state_dict(th.load("{}/agent.th".format(path), map_location=lambda storage, loc: storage))
+        self.transition_model.load_state_dict(th.load("{}/transition_model.th".format(path),
+                                                      map_location=lambda storage, loc: storage))
+        self.opponent_model.load_state_dict(th.load("{}/opponent_model.th".format(path),
+                                                    map_location=lambda storage, loc: storage))
+        self.state_estimation.load_state_dict(th.load("{}/state_estimation.th".format(path),
+                                                      map_location=lambda storage, loc: storage))
 
     def _build_agents(self, input_shape):
-        Agent, TransitionModel, OpponentModel = agent_REGISTRY[self.args.agent]
-        self.agent = Agent(input_shape, self.args)
+        # build the agent, transition model, and opponent model
+        StateEstimation, TransitionModel, OpponentModel = agent_REGISTRY[self.args.agent]
         self.transition_model = TransitionModel(input_shape, self.args)
         self.opponent_model = OpponentModel(self.args)
+        self.state_estimation = StateEstimation(input_shape, self.args)
 
     def _build_inputs(self, batch, t):
         # Assumes homogenous agents with flat observations.
@@ -88,11 +118,11 @@ class NewMAC:
             if t == 0:
                 inputs.append(th.zeros_like(batch["actions_onehot"][:, t]))
             else:
-                inputs.append(batch["actions_onehot"][:, t-1])
+                inputs.append(batch["actions_onehot"][:, t - 1])
         if self.args.obs_agent_id:
             inputs.append(th.eye(self.n_agents, device=batch.device).unsqueeze(0).expand(bs, -1, -1))
 
-        inputs = th.cat([x.reshape(bs*self.n_agents, -1) for x in inputs], dim=1)
+        inputs = th.cat([x.reshape(bs * self.n_agents, -1) for x in inputs], dim=1)
         return inputs
 
     def _get_input_shape(self, scheme):

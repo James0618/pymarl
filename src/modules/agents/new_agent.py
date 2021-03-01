@@ -3,25 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class NewAgent(nn.Module):
-    def __init__(self, observation_shape, args):
-        super(NewAgent, self).__init__()
-        self.args = args
-
-        self.policy = nn.Sequential(
-            nn.Linear(observation_shape + args.rnn_hidden_dim, args.rnn_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(args.rnn_hidden_dim, args.n_actions)
-        )
-        self.transition_model = TransitionModel(observation_shape=observation_shape, args=args)
-
-    def forward(self, inputs, state):
-        x = torch.cat((inputs, state), dim=-1)
-        q = self.policy(x)
-
-        return q
-
-
 class TransitionModel(nn.Module):
     def __init__(self, observation_shape, args):
         """
@@ -31,26 +12,30 @@ class TransitionModel(nn.Module):
         super(TransitionModel, self).__init__()
         self.args = args
 
-        # observation here contain "observation" of agents and their last actions
-        self.from_actions = nn.Linear(observation_shape, args.rnn_hidden_dim)
+        # observation here contain "observation" of agents and their actions
+        self.from_observations = nn.Linear(observation_shape + args.n_actions + args.latent_action_shape,
+                                           args.rnn_hidden_dim)
         self.transition = nn.GRUCell(args.rnn_hidden_dim, args.rnn_hidden_dim)
 
         # predict the "observation" of agents and state value
-        self.pred_observation = nn.Linear(args.rnn_hidden_dim, observation_shape - args.n_agents - args.n_actions)
-        self.pred_value = nn.Linear(args.rnn_hidden_dim, 1)
+        self.pred_observation = nn.Linear(args.rnn_hidden_dim, observation_shape)
+        self.pred_reward = nn.Linear(args.rnn_hidden_dim, 1)
 
-    def forward(self, observations, state):
-        features = F.relu(self.from_actions(observations))
-        state = state.reshape(-1, self.args.rnn_hidden_dim)
-        next_state = self.transition(features, state)
-        pred_observation = self.pred_observation(next_state)
-        pred_value = self.pred_value(next_state)
+    def forward(self, observations, hidden_state, actions):
+        observations_and_actions = torch.cat((observations, actions), dim=-1)
+        features = F.relu(self.from_observations(observations_and_actions)).reshape(-1, self.args.rnn_hidden_dim)
+        hidden_state = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
 
-        return pred_observation, pred_value, next_state
+        next_hidden_state = self.transition(features, hidden_state).reshape(self.args.n_agents, -1,
+                                                                            self.args.rnn_hidden_dim)
+        pred_reward = self.pred_reward(next_hidden_state)
+        pred_observation = self.pred_observation(next_hidden_state)
+
+        return pred_observation, pred_reward, next_hidden_state
 
     def init_hidden(self):
         # make hidden states on same device as model
-        return self.from_actions.weight.new(1, self.args.rnn_hidden_dim).zero_()
+        return self.from_observations.weight.new(1, self.args.rnn_hidden_dim).zero_()
 
 
 class OpponentModel(nn.Module):
@@ -63,9 +48,9 @@ class OpponentModel(nn.Module):
         self.args = args
 
         self.opponent = nn.Sequential(
-            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim),
+            nn.Linear(args.state_shape, args.rnn_hidden_dim),
             nn.ReLU(),
-            nn.Linear(args.rnn_hidden_dim, 10),
+            nn.Linear(args.rnn_hidden_dim, args.latent_action_shape),
             nn.Softmax()
         )
 
@@ -74,3 +59,21 @@ class OpponentModel(nn.Module):
         latent_actions = self.opponent(state)
 
         return latent_actions
+
+
+class StateEstimation(nn.Module):
+    def __init__(self, observation_shape, args):
+        super(StateEstimation, self).__init__()
+        self.args = args
+
+        self.estimate_state = nn.Linear(args.rnn_hidden_dim + observation_shape, args.state_shape)
+        self.estimate_value = nn.Linear(args.state_shape, 1)
+
+    def forward(self, hidden_state, observation):
+        # hidden_state = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
+        inputs = torch.cat((hidden_state, observation), dim=-1)
+
+        state = F.relu(self.estimate_state(inputs))
+        state_value = self.estimate_value(state)
+
+        return state, state_value
