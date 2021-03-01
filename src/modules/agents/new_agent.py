@@ -26,7 +26,7 @@ class TransitionModel(nn.Module):
         features = F.relu(self.from_observations(observations_and_actions)).reshape(-1, self.args.rnn_hidden_dim)
         hidden_state = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
 
-        next_hidden_state = self.transition(features, hidden_state).reshape(self.args.n_agents, -1,
+        next_hidden_state = self.transition(features, hidden_state).reshape(-1, self.args.n_actions,
                                                                             self.args.rnn_hidden_dim)
         pred_reward = self.pred_reward(next_hidden_state)
         pred_observation = self.pred_observation(next_hidden_state)

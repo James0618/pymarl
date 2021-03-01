@@ -19,41 +19,41 @@ class NewMAC:
     def select_actions(self, ep_batch, t_ep, t_env, bs=slice(None), test_mode=False):
         # Only select actions for the selected batch elements in bs
         # TODO: 2-step rollout
-        batch_size = ep_batch.batch_size
-
         avail_actions = ep_batch["avail_actions"][:, t_ep]
-        action = th.eye(self.args.n_actions).expand(batch_size, self.n_agents, self.args.n_actions, -1).cuda()
 
-        hidden_state = self.hidden_states.expand(batch_size, self.args.n_actions, self.n_agents, -1).transpose(1, 2)
-        agent_inputs = self._build_inputs(ep_batch, t_ep).expand(batch_size, self.args.n_actions,
-                                                                 self.n_agents, -1).transpose(1, 2)
-
-        next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
-            agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
-
-        agent_outputs = (pred_reward + next_state_value * self.args.gamma).view(ep_batch.batch_size, self.n_agents, -1)
+        agent_outputs, next_hidden_state, pred_observation, pred_reward = self.get_agent_outs(ep_batch, t_ep)
 
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env,
                                                             test_mode=test_mode)
+        self.update_hidden_states(chosen_actions, next_hidden_state, ep_batch.batch_size)
 
         return chosen_actions
 
     def get_agent_outs(self, ep_batch, t):
         batch_size = ep_batch.batch_size
 
-        avail_actions = ep_batch["avail_actions"][:, t]
-        action = th.eye(self.args.n_actions).expand(batch_size, self.n_agents, self.args.n_actions, -1).cuda()
+        action = th.eye(self.args.n_actions).expand(batch_size * self.n_agents, self.args.n_actions, -1).cuda()
 
-        hidden_state = self.hidden_states.expand(batch_size, self.args.n_actions, self.n_agents, -1).transpose(1, 2)
-        agent_inputs = self._build_inputs(ep_batch, t).expand(batch_size, self.args.n_actions,
-                                                              self.n_agents, -1).transpose(1, 2)
+        # self.hidden_state: Tensor[bs * n_agents, 64]
+        hidden_state = self.hidden_states.expand(self.args.n_actions, batch_size * self.n_agents, -1).transpose(0, 1)
+
+        agent_inputs = self._build_inputs(ep_batch, t).expand(self.args.n_actions,
+                                                              batch_size * self.n_agents, -1).transpose(0, 1)
 
         next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
             agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
 
-        agent_outputs = (pred_reward + next_state_value * self.args.gamma).view(ep_batch.batch_size, self.n_agents, -1)
+        agent_outputs = (pred_reward + next_state_value * self.args.gamma).view(ep_batch.batch_size,
+                                                                                self.n_agents, -1)
 
-        return agent_outputs, next_hidden_state, pred_observation
+        return agent_outputs, next_hidden_state, pred_observation, pred_reward
+
+    def update_hidden_states(self, chosen_action, next_hidden_state, batch_size):
+        chosen_action = chosen_action.contiguous().view(batch_size * self.n_agents, 1).cpu()
+        index = th.arange(batch_size * self.n_agents).unsqueeze(-1)
+        index = th.cat((index, chosen_action), dim=-1).t()
+
+        self.hidden_states = next_hidden_state[index.tolist()]
 
     def forward(self, agent_inputs, hidden_state, action):
         # Rollout part
@@ -72,7 +72,8 @@ class NewMAC:
         return next_hidden_state, pred_observation, pred_reward, next_state_value
 
     def init_hidden(self, batch_size):
-        self.hidden_states = self.transition_model.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)
+        hidden_states = self.transition_model.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)
+        self.hidden_states = hidden_states.view(batch_size * self.n_agents, -1)
 
     def parameters(self):
         # return self.agent.parameters()

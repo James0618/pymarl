@@ -47,7 +47,8 @@ class NewLearner:
         mac_out = []
         self.mac.init_hidden(batch.batch_size)
         for t in range(batch.max_seq_length):
-            agent_outs = self.mac.forward(batch, t=t)
+            agent_outs, next_hidden_state, pred_observation, pred_reward = self.mac.get_agent_outs(batch, t=t)
+            self.mac.update_hidden_states(actions[:, t], next_hidden_state, batch.batch_size)
             mac_out.append(agent_outs)
         mac_out = th.stack(mac_out, dim=1)  # Concat over time
 
