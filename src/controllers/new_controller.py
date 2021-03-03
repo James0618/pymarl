@@ -22,6 +22,7 @@ class NewMAC:
         avail_actions = ep_batch["avail_actions"][:, t_ep]
 
         agent_outputs, next_hidden_state, pred_observation, pred_reward = self.get_agent_outs(ep_batch, t_ep)
+        agent_outputs = agent_outputs.view(ep_batch.batch_size, self.n_agents, -1)
 
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env,
                                                             test_mode=test_mode)
@@ -43,8 +44,7 @@ class NewMAC:
         next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
             agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
 
-        agent_outputs = (pred_reward + next_state_value * self.args.gamma).view(ep_batch.batch_size,
-                                                                                self.n_agents, -1)
+        agent_outputs = (pred_reward + next_state_value * self.args.gamma)
 
         return agent_outputs, next_hidden_state, pred_observation, pred_reward
 
