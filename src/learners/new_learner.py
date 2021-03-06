@@ -31,23 +31,30 @@ class NewLearner:
         avail_actions = batch["avail_actions"]
 
         # Calculate estimated Q-Values
-        mac_out, pred_obs, pred_rs = [], [], []
+        cur_q_out, mac_out, pred_obs, pred_rs = [], [], [], []
         self.mac.init_hidden(batch.batch_size)
-        for t in range(batch.max_seq_length - 1):
-            chosen_action = actions[:, t].contiguous().view(batch.batch_size * self.args.n_agents, 1).cpu()
-            index = th.arange(batch.batch_size * self.args.n_agents).unsqueeze(-1)
-            index = th.cat((index, chosen_action), dim=-1).t()
-
+        for t in range(batch.max_seq_length):
             agent_outs, next_hidden_state, pred_observation, pred_reward = self.mac.get_agent_outs(batch, t=t)
-            self.mac.update_hidden_states(chosen_action, next_hidden_state, batch.batch_size)
+            if t == batch.max_seq_length - 1:
+                mac_out.append(agent_outs.view(batch.batch_size, self.args.n_agents, -1))
 
-            # Pick the Q-Values for the actions taken by each agent
-            mac_out.append(agent_outs[index.tolist()].view(batch.batch_size, self.args.n_agents))
-            pred_obs.append(pred_observation[index.tolist()].view(batch.batch_size, self.args.n_agents, -1))
-            pred_rs.append(pred_reward[index.tolist()].view(batch.batch_size, self.args.n_agents))
+            else:
+                chosen_action = actions[:, t].contiguous().view(batch.batch_size * self.args.n_agents, 1).cpu()
+                index = th.arange(batch.batch_size * self.args.n_agents).unsqueeze(-1)
+                index = th.cat((index, chosen_action), dim=-1).t()
+
+                self.mac.update_hidden_states(chosen_action, next_hidden_state, batch.batch_size)
+                # Pick the Q-Values for the actions taken by each agent
+                cur_q_out.append(agent_outs[index.tolist()].view(batch.batch_size, self.args.n_agents))
+                pred_obs.append(pred_observation[index.tolist()].view(batch.batch_size, self.args.n_agents, -1))
+                pred_rs.append(pred_reward[index.tolist()].view(batch.batch_size, self.args.n_agents))
+
+                mac_out.append(agent_outs.view(batch.batch_size, self.args.n_agents, -1))
 
         # Concat over time
-        mac_out, pred_obs, pred_rs = th.stack(mac_out, dim=1), th.stack(pred_obs, dim=1), th.stack(pred_rs, dim=1)
+        cur_q_out, pred_obs, pred_rs = th.stack(cur_q_out, dim=1), th.stack(pred_obs, dim=1), th.stack(pred_rs, dim=1)
+        mac_out = th.stack(mac_out, dim=1)
+
         pred_sum_rs = th.sum(pred_rs, dim=2, keepdim=True)              # sum the prediction of rewards for all agents
 
         target_observation = []
@@ -56,7 +63,6 @@ class NewLearner:
             target_observation.append(temp.view(batch.batch_size, self.args.n_agents, -1))
 
         target_obs = th.stack(target_observation, dim=1).cuda()
-        target_rs = rewards.cuda()
 
         # Calculate the Q-Values necessary for the target
         target_mac_out = []
@@ -72,10 +78,17 @@ class NewLearner:
         target_mac_out[avail_actions[:, 1:] == 0] = -9999999
 
         # Max over target Q-Values
-        target_max_qvals = target_mac_out.max(dim=3)[0]
+        if self.args.double_q:
+            # Get actions that maximise live Q (for double q-learning)
+            mac_out_detach = mac_out.clone().detach()
+            mac_out_detach[avail_actions == 0] = -9999999
+            cur_max_actions = mac_out_detach[:, 1:].max(dim=3, keepdim=True)[1]
+            target_max_qvals = th.gather(target_mac_out, 3, cur_max_actions).squeeze(3)
+        else:
+            target_max_qvals = target_mac_out.max(dim=3)[0]
 
         # Mix
-        chosen_action_qvals = th.sum(mac_out, dim=2, keepdim=True)
+        chosen_action_qvals = th.sum(cur_q_out, dim=2, keepdim=True)
         target_max_qvals = th.sum(target_max_qvals, dim=2, keepdim=True)
 
         # Calculate 1-step Q-Learning targets

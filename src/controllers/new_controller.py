@@ -40,6 +40,7 @@ class NewMAC:
 
         agent_inputs = self._build_inputs(ep_batch, t).expand(self.args.n_actions,
                                                               batch_size * self.n_agents, -1).transpose(0, 1)
+        test = agent_inputs.cpu().numpy()
 
         next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
             agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
@@ -77,7 +78,8 @@ class NewMAC:
 
     def parameters(self):
         # return self.agent.parameters()
-        return list(self.transition_model.parameters())
+        return list(self.transition_model.parameters()) + list(self.opponent_model.parameters()) + \
+               list(self.state_estimation.parameters())
 
     def load_state(self, other_mac):
         self.transition_model.load_state_dict(other_mac.transition_model.state_dict())

@@ -24,6 +24,5 @@ hypernet_embed: 64
 
 state_shape: 32
 latent_action_shape: 20
-obs_agent_id: False
 
 name: "new"
