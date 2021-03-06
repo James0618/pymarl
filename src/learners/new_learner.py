@@ -109,8 +109,20 @@ class NewLearner:
 
         q_loss = (masked_td_error ** 2).sum() / mask.sum()
 
-        # Normal L2 loss, take mean over actual data
-        loss = q_loss + masked_obs_loss + pred_sum_rs_loss
+        index = rewards.nonzero()
+        if index.shape[0] != 0:
+            index = index.t()
+            nonzero_rewards = rewards[index[0], index[1]]
+            pred_rs_nz = pred_sum_rs[index[0], index[1]]
+            nonzero_loss = ((nonzero_rewards - pred_rs_nz) ** 2).sum() / index.shape[1]
+
+            # Normal L2 loss, take mean over actual data
+            loss = q_loss + masked_obs_loss + pred_sum_rs_loss + nonzero_loss
+
+        else:
+            nonzero_loss = 0
+            # Normal L2 loss, take mean over actual data
+            loss = q_loss + masked_obs_loss + pred_sum_rs_loss
 
         # Optimise
         self.optimiser.zero_grad()
@@ -125,6 +137,7 @@ class NewLearner:
         if t_env - self.log_stats_t >= self.args.learner_log_interval:
             self.logger.log_stat("loss", loss.item(), t_env)
             self.logger.log_stat("obs_loss", masked_obs_loss.item(), t_env)
+            self.logger.log_stat("nonzero_loss", float(nonzero_loss), t_env)
             self.logger.log_stat("reward_loss", pred_sum_rs_loss.item(), t_env)
             self.logger.log_stat("grad_norm", grad_norm, t_env)
 

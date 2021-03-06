@@ -13,8 +13,9 @@ class TransitionModel(nn.Module):
         self.args = args
 
         # observation here contain "observation" of agents and their actions
-        self.from_observations = nn.Linear(observation_shape + args.n_actions + args.latent_action_shape,
-                                           args.rnn_hidden_dim)
+        self.from_observations = nn.Linear(observation_shape, args.rnn_hidden_dim)
+        self.from_actions = nn.Linear(args.n_actions + args.latent_action_shape, args.rnn_hidden_dim)
+        self.features = nn.Linear(2 * args.rnn_hidden_dim, args.rnn_hidden_dim)
         self.transition = nn.GRUCell(args.rnn_hidden_dim, args.rnn_hidden_dim)
 
         # predict the "observation" of agents and state value
@@ -22,8 +23,11 @@ class TransitionModel(nn.Module):
         self.pred_reward = nn.Linear(args.rnn_hidden_dim, 1)
 
     def forward(self, observations, hidden_state, actions):
-        observations_and_actions = torch.cat((observations, actions), dim=-1)
-        features = F.relu(self.from_observations(observations_and_actions)).reshape(-1, self.args.rnn_hidden_dim)
+        from_observations = F.relu(self.from_observations(observations)).reshape(-1, self.args.rnn_hidden_dim)
+        from_actions = F.relu(self.from_actions(actions)).reshape(-1, self.args.rnn_hidden_dim)
+
+        observations_and_actions = torch.cat((from_observations, from_actions), dim=-1)
+        features = F.relu(self.features(observations_and_actions)).reshape(-1, self.args.rnn_hidden_dim)
         hidden_state = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
 
         next_hidden_state = self.transition(features, hidden_state).reshape(-1, self.args.n_actions,
@@ -51,7 +55,7 @@ class OpponentModel(nn.Module):
             nn.Linear(args.state_shape, args.rnn_hidden_dim),
             nn.ReLU(),
             nn.Linear(args.rnn_hidden_dim, args.latent_action_shape),
-            nn.Softmax()
+            nn.Softmax(dim=-1)
         )
 
     def forward(self, state):

@@ -40,7 +40,6 @@ class NewMAC:
 
         agent_inputs = self._build_inputs(ep_batch, t).expand(self.args.n_actions,
                                                               batch_size * self.n_agents, -1).transpose(0, 1)
-        test = agent_inputs.cpu().numpy()
 
         next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
             agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
