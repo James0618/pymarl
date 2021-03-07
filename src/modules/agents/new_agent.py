@@ -13,18 +13,35 @@ class TransitionModel(nn.Module):
         self.args = args
 
         # observation here contain "observation" of agents and their actions
-        self.from_observations = nn.Linear(observation_shape, args.rnn_hidden_dim)
-        self.from_actions = nn.Linear(args.n_actions + args.latent_action_shape, args.rnn_hidden_dim)
-        self.features = nn.Linear(2 * args.rnn_hidden_dim, args.rnn_hidden_dim)
+        self.from_observations = nn.Sequential(
+            nn.Linear(observation_shape, args.rnn_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim // 2)
+        )
+        self.from_actions = nn.Sequential(
+            nn.Linear(args.n_actions + args.latent_action_shape, args.rnn_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim // 2)
+        )
+        self.features = nn.Sequential(
+            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim)
+        )
+
         self.transition = nn.GRUCell(args.rnn_hidden_dim, args.rnn_hidden_dim)
 
         # predict the "observation" of agents and state value
-        self.pred_observation = nn.Linear(args.rnn_hidden_dim, observation_shape)
+        self.pred_observation = nn.Sequential(
+            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(args.rnn_hidden_dim, observation_shape)
+        )
         self.pred_reward = nn.Linear(args.rnn_hidden_dim, 1)
 
     def forward(self, observations, hidden_state, actions):
-        from_observations = F.relu(self.from_observations(observations)).reshape(-1, self.args.rnn_hidden_dim)
-        from_actions = F.relu(self.from_actions(actions)).reshape(-1, self.args.rnn_hidden_dim)
+        from_observations = F.relu(self.from_observations(observations)).reshape(-1, self.args.rnn_hidden_dim // 2)
+        from_actions = F.relu(self.from_actions(actions)).reshape(-1, self.args.rnn_hidden_dim // 2)
 
         observations_and_actions = torch.cat((from_observations, from_actions), dim=-1)
         features = F.relu(self.features(observations_and_actions)).reshape(-1, self.args.rnn_hidden_dim)
@@ -39,7 +56,7 @@ class TransitionModel(nn.Module):
 
     def init_hidden(self):
         # make hidden states on same device as model
-        return self.from_observations.weight.new(1, self.args.rnn_hidden_dim).zero_()
+        return torch.zeros(1, self.args.rnn_hidden_dim).cuda()
 
 
 class OpponentModel(nn.Module):
@@ -70,7 +87,11 @@ class StateEstimation(nn.Module):
         super(StateEstimation, self).__init__()
         self.args = args
 
-        self.estimate_state = nn.Linear(args.rnn_hidden_dim + observation_shape, args.state_shape)
+        self.estimate_state = nn.Sequential(
+            nn.Linear(args.rnn_hidden_dim + observation_shape, args.rnn_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(args.rnn_hidden_dim, args.state_shape)
+        )
         self.estimate_value = nn.Linear(args.state_shape, 1)
 
     def forward(self, hidden_state, observation):

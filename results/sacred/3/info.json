@@ -1,0 +1,162 @@
+{
+  "battle_won_mean": [
+    1.0,
+    0.2682926829268293
+  ],
+  "battle_won_mean_T": [
+    2000083,
+    2010099
+  ],
+  "dead_allies_mean": [
+    0.0,
+    2.351219512195122
+  ],
+  "dead_allies_mean_T": [
+    2000083,
+    2010099
+  ],
+  "dead_enemies_mean": [
+    3.0,
+    1.973170731707317
+  ],
+  "dead_enemies_mean_T": [
+    2000083,
+    2010099
+  ],
+  "ep_length_mean": [
+    20.0,
+    24.429268292682927
+  ],
+  "ep_length_mean_T": [
+    2000083,
+    2010099
+  ],
+  "episode": [
+    1,
+    411
+  ],
+  "episode_T": [
+    2000083,
+    2010099
+  ],
+  "epsilon": [
+    0.05,
+    0.05
+  ],
+  "epsilon_T": [
+    2000083,
+    2010099
+  ],
+  "grad_norm": [
+    25.633523641889386
+  ],
+  "grad_norm_T": [
+    2000776
+  ],
+  "loss": [
+    2.1155500411987305
+  ],
+  "loss_T": [
+    2000776
+  ],
+  "nonzero_loss": [
+    0.7551878690719604
+  ],
+  "nonzero_loss_T": [
+    2000776
+  ],
+  "obs_loss": [
+    0.03410908207297325
+  ],
+  "obs_loss_T": [
+    2000776
+  ],
+  "q_taken_mean": [
+    2.0876502509204067
+  ],
+  "q_taken_mean_T": [
+    2000776
+  ],
+  "return_mean": [
+    20.0,
+    10.016572001336453
+  ],
+  "return_mean_T": [
+    2000083,
+    2010099
+  ],
+  "return_std": [
+    0.0,
+    6.132693237068658
+  ],
+  "return_std_T": [
+    2000083,
+    2010099
+  ],
+  "reward_loss": [
+    0.7233656644821167
+  ],
+  "reward_loss_T": [
+    2000776
+  ],
+  "target_mean": [
+    2.0530370682854135
+  ],
+  "target_mean_T": [
+    2000776
+  ],
+  "td_error_abs": [
+    0.4938033479794881
+  ],
+  "td_error_abs_T": [
+    2000776
+  ],
+  "test_battle_won_mean": [
+    0.75,
+    0.84375
+  ],
+  "test_battle_won_mean_T": [
+    2000083,
+    2010099
+  ],
+  "test_dead_allies_mean": [
+    1.0625,
+    0.96875
+  ],
+  "test_dead_allies_mean_T": [
+    2000083,
+    2010099
+  ],
+  "test_dead_enemies_mean": [
+    2.59375,
+    2.84375
+  ],
+  "test_dead_enemies_mean_T": [
+    2000083,
+    2010099
+  ],
+  "test_ep_length_mean": [
+    22.40625,
+    23.46875
+  ],
+  "test_ep_length_mean_T": [
+    2000083,
+    2010099
+  ],
+  "test_return_mean": [
+    16.73458904109589,
+    17.950342465753423
+  ],
+  "test_return_mean_T": [
+    2000083,
+    2010099
+  ],
+  "test_return_std": [
+    5.680041788448506,
+    4.769776843245308
+  ],
+  "test_return_std_T": [
+    2000083,
+    2010099
+  ]
+}

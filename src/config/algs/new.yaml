@@ -23,6 +23,7 @@ mixing_embed_dim: 32
 hypernet_embed: 64
 
 state_shape: 32
-latent_action_shape: 20
+latent_action_shape: 12
 
 name: "new"
+t_max: 4050000
