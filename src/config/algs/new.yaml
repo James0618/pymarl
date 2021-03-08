@@ -11,6 +11,7 @@ mac: "new_mac"
 agent: "new"
 
 buffer_size: 5000
+batch_size: 16
 
 # update the target network every {} episodes
 target_update_interval: 200

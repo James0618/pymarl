@@ -19,10 +19,12 @@ class TransitionModel(nn.Module):
             nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim // 2)
         )
         self.from_actions = nn.Sequential(
-            nn.Linear(args.n_actions + args.latent_action_shape, args.rnn_hidden_dim),
+            nn.Linear(args.n_actions, args.rnn_hidden_dim),
             nn.ReLU(),
-            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim // 2)
+            nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim // 4)
         )
+        self.from_opponent_actions = nn.Linear(args.latent_action_shape, args.rnn_hidden_dim // 4)
+
         self.features = nn.Sequential(
             nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim),
             nn.ReLU(),
@@ -39,11 +41,14 @@ class TransitionModel(nn.Module):
         )
         self.pred_reward = nn.Linear(args.rnn_hidden_dim, 1)
 
-    def forward(self, observations, hidden_state, actions):
+    def forward(self, observations, hidden_state, actions, opponent_actions):
         from_observations = F.relu(self.from_observations(observations)).reshape(-1, self.args.rnn_hidden_dim // 2)
-        from_actions = F.relu(self.from_actions(actions)).reshape(-1, self.args.rnn_hidden_dim // 2)
+        from_actions = F.relu(self.from_actions(actions)).reshape(-1, self.args.rnn_hidden_dim // 4)
+        from_opponent_actions = F.relu(self.from_opponent_actions(
+            opponent_actions)).reshape(-1, self.args.rnn_hidden_dim // 4)
+        from_all_actions = torch.cat((from_actions, from_opponent_actions), dim=-1)
 
-        observations_and_actions = torch.cat((from_observations, from_actions), dim=-1)
+        observations_and_actions = torch.cat((from_observations, from_all_actions), dim=-1)
         features = F.relu(self.features(observations_and_actions)).reshape(-1, self.args.rnn_hidden_dim)
         hidden_state = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
 
@@ -72,7 +77,6 @@ class OpponentModel(nn.Module):
             nn.Linear(input_shape, args.rnn_hidden_dim),
             nn.ReLU(),
             nn.Linear(args.rnn_hidden_dim, args.latent_action_shape),
-            nn.Softmax(dim=-1)
         )
 
     def forward(self, agent_inputs, last_agent_inputs):

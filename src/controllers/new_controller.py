@@ -66,10 +66,8 @@ class NewMAC:
         # state_value = self.state_estimation.forward(hidden_state, agent_inputs)
         opponent_action = self.opponent_model.forward(agent_inputs, last_agent_inputs)
 
-        actions = th.cat((action, opponent_action), dim=-1)
-
         pred_observation, pred_reward, next_hidden_state = self.transition_model.forward(
-            agent_inputs, hidden_state, actions)
+            agent_inputs, hidden_state, action, opponent_action)
 
         # estimate the next state and its value by prediction of next observation and next hidden state
         next_state_value = self.state_estimation.forward(next_hidden_state, pred_observation)
@@ -85,6 +83,12 @@ class NewMAC:
         # return self.agent.parameters()
         return list(self.transition_model.parameters()) + list(self.opponent_model.parameters()) + \
                list(self.state_estimation.parameters())
+
+    def transition_parameters(self):
+        return list(self.transition_model.parameters()) + list(self.opponent_model.parameters())
+
+    def value_parameters(self):
+        return list(self.state_estimation.parameters())
 
     def load_state(self, other_mac):
         self.transition_model.load_state_dict(other_mac.transition_model.state_dict())
