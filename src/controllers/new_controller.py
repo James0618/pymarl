@@ -40,9 +40,15 @@ class NewMAC:
 
         agent_inputs = self._build_inputs(ep_batch, t).expand(self.args.n_actions,
                                                               batch_size * self.n_agents, -1).transpose(0, 1)
+        if t == 0:
+            last_agent_inputs = self._build_inputs(ep_batch, t).expand(self.args.n_actions,
+                                                                       batch_size * self.n_agents, -1).transpose(0, 1)
+        else:
+            last_agent_inputs = self._build_inputs(ep_batch, t-1).expand(self.args.n_actions,
+                                                                         batch_size * self.n_agents, -1).transpose(0, 1)
 
         next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
-            agent_inputs=agent_inputs, hidden_state=hidden_state, action=action)
+            agent_inputs=agent_inputs, last_agent_inputs=last_agent_inputs, hidden_state=hidden_state, action=action)
 
         agent_outputs = (pred_reward + next_state_value * self.args.gamma)
 
@@ -55,10 +61,10 @@ class NewMAC:
 
         self.hidden_states = next_hidden_state[index.tolist()]
 
-    def forward(self, agent_inputs, hidden_state, action):
+    def forward(self, agent_inputs, last_agent_inputs, hidden_state, action):
         # Rollout part
-        state, state_value = self.state_estimation.forward(hidden_state, agent_inputs)
-        opponent_action = self.opponent_model.forward(state)
+        # state_value = self.state_estimation.forward(hidden_state, agent_inputs)
+        opponent_action = self.opponent_model.forward(agent_inputs, last_agent_inputs)
 
         actions = th.cat((action, opponent_action), dim=-1)
 
@@ -66,7 +72,7 @@ class NewMAC:
             agent_inputs, hidden_state, actions)
 
         # estimate the next state and its value by prediction of next observation and next hidden state
-        next_state, next_state_value = self.state_estimation.forward(next_hidden_state, pred_observation)
+        next_state_value = self.state_estimation.forward(next_hidden_state, pred_observation)
 
         # return agent_outs.view(ep_batch.batch_size, self.n_agents, -1)
         return next_hidden_state, pred_observation, pred_reward, next_state_value
@@ -107,7 +113,7 @@ class NewMAC:
         # build the agent, transition model, and opponent model
         StateEstimation, TransitionModel, OpponentModel = agent_REGISTRY[self.args.agent]
         self.transition_model = TransitionModel(input_shape, self.args)
-        self.opponent_model = OpponentModel(self.args)
+        self.opponent_model = OpponentModel(input_shape, self.args)
         self.state_estimation = StateEstimation(input_shape, self.args)
 
     def _build_inputs(self, batch, t):
