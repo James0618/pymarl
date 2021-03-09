@@ -59,6 +59,7 @@ class NewLearner:
             target_observation.append(temp.view(batch.batch_size, self.args.n_agents, -1))
 
         target_obs = th.stack(target_observation, dim=1).cuda()
+        target_obs_np, pred_obs_np = target_obs.cpu().numpy(), pred_obs.cpu().detach().numpy()
 
         pred_obs_loss = ((target_obs - pred_obs) ** 2).sum(-1).sum(-1) / (self.args.n_agents * pred_obs.shape[-1])
         mask = mask.expand_as(pred_obs_loss.unsqueeze(-1))
@@ -84,7 +85,6 @@ class NewLearner:
         # Optimise
         self.transition_optimiser.zero_grad()
         loss.backward()
-        grad_norm = th.nn.utils.clip_grad_norm_(self.params, self.args.grad_norm_clip)
         self.transition_optimiser.step()
 
         if (episode_num - self.last_target_update_episode) / self.args.target_update_interval >= 1.0:
@@ -96,9 +96,10 @@ class NewLearner:
             self.logger.log_stat("obs_loss", masked_obs_loss.item(), t_env)
             self.logger.log_stat("nonzero_loss", float(nonzero_loss), t_env)
             self.logger.log_stat("reward_loss", pred_sum_rs_loss.item(), t_env)
-            self.logger.log_stat("grad_norm", grad_norm, t_env)
 
             self.log_stats_t = t_env
+
+        return float(loss)
 
     def train_value(self, batch: EpisodeBatch, t_env: int, episode_num: int):
         # Get the relevant quantities
@@ -174,7 +175,6 @@ class NewLearner:
         # Optimise
         self.value_optimiser.zero_grad()
         loss.backward()
-        grad_norm = th.nn.utils.clip_grad_norm_(self.params, self.args.grad_norm_clip)
         self.value_optimiser.step()
 
         if (episode_num - self.last_target_update_episode) / self.args.target_update_interval >= 1.0:
@@ -183,8 +183,6 @@ class NewLearner:
 
         if t_env - self.log_stats_t >= self.args.learner_log_interval:
             self.logger.log_stat("value_loss", loss.item(), t_env)
-            self.logger.log_stat("grad_norm", grad_norm, t_env)
-
             mask_elems = mask.sum().item()
             self.logger.log_stat("td_error_abs", (masked_td_error.abs().sum().item() / mask_elems), t_env)
             self.logger.log_stat("q_taken_mean",
@@ -192,6 +190,8 @@ class NewLearner:
             self.logger.log_stat("target_mean", (targets * mask).sum().item() / (mask_elems * self.args.n_agents),
                                  t_env)
             self.log_stats_t = t_env
+
+        return float(loss)
 
     def train_together(self, batch: EpisodeBatch, t_env: int, episode_num: int, mode='together'):
         # Get the relevant quantities
@@ -319,15 +319,19 @@ class NewLearner:
             self.logger.log_stat("target_mean", (targets * mask).sum().item()/(mask_elems * self.args.n_agents), t_env)
             self.log_stats_t = t_env
 
+        return float(loss)
+
     def train(self, batch: EpisodeBatch, t_env: int, episode_num: int, mode='transition'):
         if mode == 'together':
-            self.train_together(batch, t_env, episode_num)
+            loss = self.train_together(batch, t_env, episode_num)
         elif mode == 'transition':
-            self.train_transition(batch, t_env, episode_num)
+            loss = self.train_transition(batch, t_env, episode_num)
         elif mode == 'value':
-            self.train_value(batch, t_env, episode_num)
+            loss = self.train_value(batch, t_env, episode_num)
         else:
             raise ValueError('Wrong Training Mode!')
+
+        return loss
 
     def _update_targets(self):
         self.target_mac.load_state(self.mac)

@@ -166,7 +166,7 @@ def run_sequential(args, logger):
 
         if buffer.can_sample(5 * args.batch_size):
             transition_loss = 1.0
-            while transition_loss > 1e-2:
+            while transition_loss > 1e-3:
                 episode_sample = buffer.sample(args.batch_size)
 
                 # Truncate batch to only filled timesteps

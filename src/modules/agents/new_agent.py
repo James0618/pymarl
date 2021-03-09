@@ -74,16 +74,17 @@ class OpponentModel(nn.Module):
         self.args = args
 
         self.opponent = nn.Sequential(
-            nn.Linear(input_shape, args.rnn_hidden_dim),
+            nn.Linear(input_shape * 2, args.rnn_hidden_dim * 2),
             nn.ReLU(),
-            nn.Linear(args.rnn_hidden_dim, args.latent_action_shape),
+            nn.Linear(args.rnn_hidden_dim * 2, args.latent_action_shape),
         )
 
     def forward(self, agent_inputs, last_agent_inputs):
         # TODO: Add GMM to the opponent model!
-        diff_obs = agent_inputs - last_agent_inputs
-        test = diff_obs.cpu().numpy()
-        latent_actions = self.opponent(diff_obs)
+        inputs = torch.cat((agent_inputs, last_agent_inputs), dim=-1)
+
+        # diff_obs = agent_inputs - last_agent_inputs
+        latent_actions = self.opponent(inputs)
 
         return latent_actions
 
