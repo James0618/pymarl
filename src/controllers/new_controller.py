@@ -21,7 +21,7 @@ class NewMAC:
         # TODO: 2-step rollout
         avail_actions = ep_batch["avail_actions"][:, t_ep]
 
-        agent_outputs, next_hidden_state, pred_observation, pred_reward = self.get_agent_outs(ep_batch, t_ep)
+        agent_outputs, next_hidden_state, _, _, pred_reward = self.get_agent_outs(ep_batch, t_ep)
         agent_outputs = agent_outputs.view(ep_batch.batch_size, self.n_agents, -1)
 
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env,
@@ -33,26 +33,20 @@ class NewMAC:
     def get_agent_outs(self, ep_batch, t):
         batch_size = ep_batch.batch_size
 
-        action = th.eye(self.args.n_actions).expand(batch_size * self.n_agents, self.args.n_actions, -1).cuda()
+        actions = th.eye(self.args.n_actions).expand(batch_size * self.n_agents, self.args.n_actions, -1).cuda()
 
         # self.hidden_state: Tensor[bs * n_agents, 64]
         hidden_state = self.hidden_states.expand(self.args.n_actions, batch_size * self.n_agents, -1).transpose(0, 1)
 
         agent_inputs = self._build_inputs(ep_batch, t).expand(self.args.n_actions,
                                                               batch_size * self.n_agents, -1).transpose(0, 1)
-        if t == 0:
-            last_agent_inputs = self._build_inputs(ep_batch, t).expand(self.args.n_actions,
-                                                                       batch_size * self.n_agents, -1).transpose(0, 1)
-        else:
-            last_agent_inputs = self._build_inputs(ep_batch, t-1).expand(self.args.n_actions,
-                                                                         batch_size * self.n_agents, -1).transpose(0, 1)
 
-        next_hidden_state, pred_observation, pred_reward, next_state_value = self.forward(
-            agent_inputs=agent_inputs, last_agent_inputs=last_agent_inputs, hidden_state=hidden_state, action=action)
+        next_hidden_state, states, next_states, pred_reward, pred_value = self.forward(
+            agent_inputs=agent_inputs, hidden_state=hidden_state, actions=actions)
 
-        agent_outputs = (pred_reward + next_state_value * self.args.gamma)
+        agent_outputs = (pred_reward + pred_value * self.args.gamma)
 
-        return agent_outputs, next_hidden_state, pred_observation, pred_reward
+        return agent_outputs, next_hidden_state, states[:, 0], next_states, pred_reward
 
     def update_hidden_states(self, chosen_action, next_hidden_state, batch_size):
         chosen_action = chosen_action.contiguous().view(batch_size * self.n_agents, 1).cpu()
@@ -61,50 +55,49 @@ class NewMAC:
 
         self.hidden_states = next_hidden_state[index.tolist()]
 
-    def forward(self, agent_inputs, last_agent_inputs, hidden_state, action):
+    def forward(self, agent_inputs, hidden_state, actions):
         # Rollout part
-        # state_value = self.state_estimation.forward(hidden_state, agent_inputs)
-        opponent_action = self.opponent_model.forward(agent_inputs, last_agent_inputs)
-        # opponent_action_np = opponent_action.cpu().detach().numpy()
+        states, next_hidden_state = self.state_estimation.forward(hidden_state=hidden_state, observation=agent_inputs)
+        opponent_actions = self.opponent_model.forward(states)
 
-        pred_observation, pred_reward, next_hidden_state = self.transition_model.forward(
-            agent_inputs, hidden_state, action, opponent_action)
+        next_states, pred_reward = self.transition_model.forward(states, actions, opponent_actions)
+        pred_value = self.value_estimation(next_states)
 
-        # estimate the next state and its value by prediction of next observation and next hidden state
-        next_state_value = self.state_estimation.forward(next_hidden_state, pred_observation)
-
-        # return agent_outs.view(ep_batch.batch_size, self.n_agents, -1)
-        return next_hidden_state, pred_observation, pred_reward, next_state_value
+        return next_hidden_state, states, next_states, pred_reward, pred_value
 
     def init_hidden(self, batch_size):
-        hidden_states = self.transition_model.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)
+        hidden_states = self.state_estimation.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)
         self.hidden_states = hidden_states.view(batch_size * self.n_agents, -1)
 
     def parameters(self):
         # return self.agent.parameters()
         return list(self.transition_model.parameters()) + list(self.opponent_model.parameters()) + \
-               list(self.state_estimation.parameters())
+               list(self.state_estimation.parameters()) + list(self.value_estimation.parameters())
 
     def transition_parameters(self):
-        return list(self.transition_model.parameters()) + list(self.opponent_model.parameters())
+        return list(self.transition_model.parameters()) + list(self.opponent_model.parameters()) + \
+               list(self.state_estimation.parameters())
 
     def value_parameters(self):
-        return list(self.state_estimation.parameters())
+        return list(self.value_estimation.parameters())
 
     def load_state(self, other_mac):
         self.transition_model.load_state_dict(other_mac.transition_model.state_dict())
         self.opponent_model.load_state_dict(other_mac.opponent_model.state_dict())
         self.state_estimation.load_state_dict(other_mac.state_estimation.state_dict())
+        self.value_estimation.load_state_dict(other_mac.value_estimation.state_dict())
 
     def cuda(self):
         self.transition_model.cuda()
         self.opponent_model.cuda()
         self.state_estimation.cuda()
+        self.value_estimation.cuda()
 
     def save_models(self, path):
         th.save(self.transition_model.state_dict(), "{}/transition_model.th".format(path))
         th.save(self.opponent_model.state_dict(), "{}/opponent_model.th".format(path))
         th.save(self.state_estimation.state_dict(), "{}/state_estimation.th".format(path))
+        th.save(self.value_estimation.state_dict(), "{}/value_estimation.th".format(path))
 
     def load_models(self, path):
         self.transition_model.load_state_dict(th.load("{}/transition_model.th".format(path),
@@ -113,13 +106,16 @@ class NewMAC:
                                                     map_location=lambda storage, loc: storage))
         self.state_estimation.load_state_dict(th.load("{}/state_estimation.th".format(path),
                                                       map_location=lambda storage, loc: storage))
+        self.value_estimation.load_state_dict(th.load("{}/value_estimation.th".format(path),
+                                                      map_location=lambda storage, loc: storage))
 
     def _build_agents(self, input_shape):
         # build the agent, transition model, and opponent model
-        StateEstimation, TransitionModel, OpponentModel = agent_REGISTRY[self.args.agent]
-        self.transition_model = TransitionModel(input_shape, self.args)
-        self.opponent_model = OpponentModel(input_shape, self.args)
+        StateEstimation, ValueEstimation, TransitionModel, OpponentModel = agent_REGISTRY[self.args.agent]
+        self.transition_model = TransitionModel(self.args)
+        self.opponent_model = OpponentModel(self.args)
         self.state_estimation = StateEstimation(input_shape, self.args)
+        self.value_estimation = ValueEstimation(self.args)
 
     def _build_inputs(self, batch, t):
         # Assumes homogenous agents with flat observations.

@@ -23,9 +23,8 @@ double_q: True
 mixing_embed_dim: 32
 hypernet_embed: 64
 
-state_shape: 32
+latent_state_shape: 32
 latent_action_shape: 12
 
 name: "new"
-t_max: 50000
-save_model_interval: 10000
+save_model_interval: 1000000
