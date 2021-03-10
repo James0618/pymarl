@@ -27,4 +27,5 @@ state_shape: 32
 latent_action_shape: 12
 
 name: "new"
-t_max: 4050000
+t_max: 50000
+save_model_interval: 10000

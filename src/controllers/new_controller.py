@@ -64,9 +64,8 @@ class NewMAC:
     def forward(self, agent_inputs, last_agent_inputs, hidden_state, action):
         # Rollout part
         # state_value = self.state_estimation.forward(hidden_state, agent_inputs)
-        agent_inputs_np, last_agent_inputs_np = agent_inputs.cpu().numpy(), last_agent_inputs.cpu().numpy()
         opponent_action = self.opponent_model.forward(agent_inputs, last_agent_inputs)
-        opponent_action_np = opponent_action.cpu().detach().numpy()
+        # opponent_action_np = opponent_action.cpu().detach().numpy()
 
         pred_observation, pred_reward, next_hidden_state = self.transition_model.forward(
             agent_inputs, hidden_state, action, opponent_action)
