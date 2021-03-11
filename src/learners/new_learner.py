@@ -62,8 +62,6 @@ class NewLearner:
         cur_q_out, next_s, pred_rs = th.stack(cur_q_out, dim=1), th.stack(next_s, dim=1), th.stack(pred_rs, dim=1)
         mac_out, cur_s = th.stack(mac_out, dim=1), th.stack(cur_s[1:], dim=1)
 
-        pred_sum_rs = th.sum(pred_rs, dim=2, keepdim=True)              # sum the prediction of rewards for all agents
-
         # Calculate the Q-Values necessary for the target
         target_mac_out = []
         self.target_mac.init_hidden(batch.batch_size)
@@ -88,8 +86,7 @@ class NewLearner:
             target_max_qvals = target_mac_out.max(dim=3)[0]
 
         # Mix
-        chosen_action_qvals = th.sum(cur_q_out, dim=2, keepdim=True)
-        target_max_qvals = th.sum(target_max_qvals, dim=2, keepdim=True)
+        chosen_action_qvals = cur_q_out
 
         # Calculate 1-step Q-Learning targets
         targets = rewards + self.args.gamma * (1 - terminated) * target_max_qvals
@@ -105,7 +102,7 @@ class NewLearner:
         transition_loss = ((next_s - cur_s.detach()) ** 2).sum(-1).sum(-1) / (self.args.n_agents * cur_s.shape[-1])
         masked_transition_loss = (transition_loss.unsqueeze(-1) * mask).sum() / mask.sum()
 
-        pred_sum_rs_loss = (((rewards - pred_sum_rs) * mask) ** 2).sum() / mask.sum()
+        pred_rs_loss = (((rewards - pred_rs) * mask) ** 2).sum() / mask.sum()
 
         q_loss = (masked_td_error ** 2).sum() / mask.sum()
 
@@ -113,16 +110,22 @@ class NewLearner:
         if index.shape[0] != 0:
             index = index.t()
             nonzero_rewards = rewards[index[0], index[1]]
-            pred_rs_nz = pred_sum_rs[index[0], index[1]]
+            pred_rs_nz = pred_rs[index[0], index[1]]
             nonzero_loss = ((nonzero_rewards - pred_rs_nz) ** 2).sum() / index.shape[1]
 
             # Normal L2 loss, take mean over actual data
-            loss = q_loss + masked_transition_loss + pred_sum_rs_loss + nonzero_loss
+            if mode == 'transition':
+                loss = masked_transition_loss + 0.25 * pred_rs_loss + nonzero_loss
+            else:
+                loss = q_loss
 
         else:
             nonzero_loss = 0
             # Normal L2 loss, take mean over actual data
-            loss = q_loss + masked_transition_loss + pred_sum_rs_loss + nonzero_loss
+            if mode == 'transition':
+                loss = masked_transition_loss + pred_rs_loss + nonzero_loss
+            else:
+                loss = q_loss
 
         # Optimise
         self.optimiser.zero_grad()
@@ -138,7 +141,7 @@ class NewLearner:
             self.logger.log_stat("loss", loss.item(), t_env)
             self.logger.log_stat("transition_loss", masked_transition_loss.item(), t_env)
             self.logger.log_stat("nonzero_loss", float(nonzero_loss), t_env)
-            self.logger.log_stat("reward_loss", pred_sum_rs_loss.item(), t_env)
+            self.logger.log_stat("reward_loss", pred_rs_loss.item(), t_env)
             self.logger.log_stat("grad_norm", grad_norm, t_env)
 
             mask_elems = mask.sum().item()
@@ -146,6 +149,8 @@ class NewLearner:
             self.logger.log_stat("q_taken_mean", (chosen_action_qvals * mask).sum().item()/(mask_elems * self.args.n_agents), t_env)
             self.logger.log_stat("target_mean", (targets * mask).sum().item()/(mask_elems * self.args.n_agents), t_env)
             self.log_stats_t = t_env
+
+        return float(loss)
 
     def _update_targets(self):
         self.target_mac.load_state(self.mac)

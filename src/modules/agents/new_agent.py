@@ -19,7 +19,7 @@ class TransitionModel(nn.Module):
             nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim // 2)
         )
         self.from_agent_actions = nn.Sequential(
-            nn.Linear(args.n_actions, args.rnn_hidden_dim),
+            nn.Linear(args.n_actions, args.rnn_hidden_dim // 4),
             nn.ReLU(),
             nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim // 4)
         )
