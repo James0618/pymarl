@@ -24,7 +24,7 @@ mixing_embed_dim: 32
 hypernet_embed: 64
 
 latent_state_shape: 32
-latent_action_shape: 12
+latent_action_shape: 24
 
 name: "new"
 save_model_interval: 1000000

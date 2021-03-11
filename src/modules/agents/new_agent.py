@@ -97,7 +97,8 @@ class StateEstimation(nn.Module):
         self.state = nn.Sequential(
             nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim),
             nn.ReLU(),
-            nn.Linear(args.rnn_hidden_dim, args.latent_state_shape)
+            nn.Linear(args.rnn_hidden_dim, args.latent_state_shape),
+            nn.Sigmoid()
         )
 
     def forward(self, hidden_state, observation):
@@ -105,7 +106,7 @@ class StateEstimation(nn.Module):
         features = self.features(observation).reshape(-1, self.args.rnn_hidden_dim)
         hidden_state = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
 
-        next_hidden_state = self.gru(hidden_state, features)
+        next_hidden_state = self.gru(features, hidden_state)
         next_hidden_state = next_hidden_state.reshape(-1, self.args.n_actions, self.args.rnn_hidden_dim)
 
         state = self.state(next_hidden_state)

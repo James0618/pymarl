@@ -60,7 +60,7 @@ class NewLearner:
 
         # Concat over time
         cur_q_out, next_s, pred_rs = th.stack(cur_q_out, dim=1), th.stack(next_s, dim=1), th.stack(pred_rs, dim=1)
-        mac_out, cur_s = th.stack(mac_out, dim=1), th.stack(cur_s[:-1], dim=1)
+        mac_out, cur_s = th.stack(mac_out, dim=1), th.stack(cur_s[1:], dim=1)
 
         pred_sum_rs = th.sum(pred_rs, dim=2, keepdim=True)              # sum the prediction of rewards for all agents
 
@@ -122,7 +122,7 @@ class NewLearner:
         else:
             nonzero_loss = 0
             # Normal L2 loss, take mean over actual data
-            loss = q_loss + masked_transition_loss + pred_sum_rs_loss
+            loss = q_loss + masked_transition_loss + pred_sum_rs_loss + nonzero_loss
 
         # Optimise
         self.optimiser.zero_grad()

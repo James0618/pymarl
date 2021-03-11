@@ -165,6 +165,19 @@ def run_sequential(args, logger):
         buffer.insert_episode_batch(episode_batch)
 
         if buffer.can_sample(5 * args.batch_size):
+            transition_loss = 1.0
+            while transition_loss > 1e-2:
+                episode_sample = buffer.sample(args.batch_size)
+
+                # Truncate batch to only filled timesteps
+                max_ep_t = episode_sample.max_t_filled()
+                episode_sample = episode_sample[:, :max_ep_t]
+
+                if episode_sample.device != args.device:
+                    episode_sample.to(args.device)
+
+                transition_loss = learner.train(episode_sample, runner.t_env, episode, mode='transition')
+
             episode_sample = buffer.sample(args.batch_size)
 
             # Truncate batch to only filled timesteps
@@ -174,7 +187,7 @@ def run_sequential(args, logger):
             if episode_sample.device != args.device:
                 episode_sample.to(args.device)
 
-            learner.train(episode_sample, runner.t_env, episode, mode='value')
+            _ = learner.train(episode_sample, runner.t_env, episode, mode='value')
 
         # Execute test runs once in a while
         n_test_runs = max(1, args.test_nepisode // runner.batch_size)
